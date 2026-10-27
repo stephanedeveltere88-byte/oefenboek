@@ -1246,7 +1246,7 @@ const GEN={
 /* ============================================================
    OPSLAG — Google Sheets via Apps Script; tablet bewaart alles ook lokaal
    ============================================================ */
-const APP_VERSION="2026-10-27d";   // verhoog bij elke nieuwe versie: open toestellen verversen dan vanzelf
+const APP_VERSION="2026-10-27e";   // verhoog bij elke nieuwe versie: open toestellen verversen dan vanzelf
 const API="https://script.google.com/macros/s/AKfycbxYU3NLOuzILvaN4VYhfn_AWjmx5ISrNByfw3saj-wNffYajtyl4GFuwN0eacfKFY5DZw/exec";   // <-- de /exec-link van je Google Apps Script
 const S={profile:null,code:null,progress:null,session:null,view:"login",parentSel:null,parent:null,pin:null,puser:null,online:null};
 const LS={get(k,d){try{const v=localStorage.getItem("oefenhoek:"+k);return v?JSON.parse(v):d}catch(e){return d}},set(k,v){try{localStorage.setItem("oefenhoek:"+k,JSON.stringify(v))}catch(e){}}};
@@ -1378,6 +1378,7 @@ function nextQuestion(){
   if(ch.gen){const g=GEN[cat]();return{id:"gen-"+cat+"-"+Date.now().toString(36),cat,d:2,gen:true,...g}}
   return ch.q;
 }
+function markSeen(P,key){if(!P[key]){P[key]={n:0,ok:0,box:0,last:Date.now()};saveProgress()}}
 function recordAnswer(q,firstOk){const now=Date.now();const P=S.progress;
   const key=q.gen?"gen-"+q.cat:q.id;const st=P.q[key]||{n:0,ok:0,box:0,last:0};st.n++;if(firstOk){st.ok++;st.box=Math.min(st.box+1,5)}else st.box=0;st.last=now;P.q[key]=st;
   const c=P.cat[q.cat]||{n:0,ok:0,recent:[]};c.n++;if(firstOk)c.ok++;c.recent=[...c.recent,firstOk?1:0].slice(-10);c.last=now;P.cat[q.cat]=c;}
@@ -1685,7 +1686,7 @@ function checkStep(){const C=S.cur,s=C.q.steps[C.step];const v=document.getEleme
   C.focusStep=!C.stepDone;renderQ()}
 
 function choose(k){const C=S.cur,q=C.q;
-  if(C.phase==="ask"){C.first=k;if(k===q.a){C.phase="right";finishQ(!C.hints,C.hints?true:null)}else{C.wrong.push(k);C.phase="help";C.step=0;C.stepDone=false;C.stepTries=0;C.focusStep=true}}
+  if(C.phase==="ask"){C.first=k;if(k===q.a){C.phase="right";finishQ(!C.hints,C.hints?true:null)}else{markSeen(S.progress.q,q.gen?"gen-"+q.cat:q.id);C.wrong.push(k);C.phase="help";C.step=0;C.stepDone=false;C.stepTries=0;C.focusStep=true}}
   else if(C.phase==="retry"){C.second=k;if(k===q.a){C.phase="solved";finishQ(false,true)}else{C.wrong.push(k);C.phase="reveal";C.step=q.steps.length-1;finishQ(false,false)}}
   renderQ();
 }
@@ -1844,8 +1845,8 @@ function frWrongItems(){const P=S.progress.fr||{},now=Date.now();if(!FR.words)re
 function laWrongItems(){const a=laP(),now=Date.now();if(!LA.words)return[];const by=new Map(LA.words.map(w=>[laKey(w),w]));
   return Object.entries(a.w).filter(([k,st])=>k.endsWith("|"+a.mode)&&recentWrong(st,now)).map(([k])=>by.get(k.slice(0,k.lastIndexOf("|")))).filter(w=>w&&(a.mode==="woord"||laForms(w))).slice(0,30).map(w=>laMakeItem(w,a))}
 function kgWrongIds(){const now=Date.now(),ed=kgEdition();const ids=new Set(QB.filter(q=>(q.ed||"koala")===ed).map(q=>q.id));
-  return Object.entries(S.progress.q||{}).filter(([k,st])=>ids.has(k)&&recentWrong(st,now)).sort((a,b)=>b[1].last-a[1].last).map(([k])=>k).slice(0,10)}
-const wrongBtn=(n,act,what)=>n?`<div class="panel wrongpanel"><div class="spread"><div><h3>🔁 Oefen wat je fout had</h3><p class="small muted">${n} ${what} die je de laatste 2 weken fout had.</p></div><button class="btn sun" data-act="${act}">Start (${n})</button></div></div>`:"";
+  return Object.entries(S.progress.q||{}).filter(([k,st])=>ids.has(k)&&recentWrong(st,now)&&wrongBack(st,now)).sort((a,b)=>b[1].last-a[1].last).map(([k])=>k).slice(0,10)}
+const wrongBtn=(n,act,what)=>n?`<div class="panel wrongpanel"><div class="spread"><div><h3>🔁 Oefen wat je fout had</h3><p class="small muted">${n} ${what} die je de vorige dagen fout had.</p></div><button class="btn sun" data-act="${act}">Start (${n})</button></div></div>`:"";
 function frStart(items){
   const now=Date.now();
   S.fs={id:S.profile.id+"-fr-"+now,start:now,items:items||frPick(),pos:0,done:[],retry:0};
@@ -2899,7 +2900,7 @@ function wiNext(){const P=wiProg(),now=Date.now(),used=new Set(S.wi.items.map(x=
   const c=open.map(x=>{const st=P.q[x.id];let w;if(!st)w=2.5;else w=st.box===0?6:0.6;
     const tp=P.top[x.onderwerp];if(tp&&tp.n>=3)w*=1+1.5*(1-tp.ok/tp.n);return{x,w:w*(lv[x.niveau||2]||1)}});
   if(!c.length)return null;return weightedPick(c).x}
-function wiWrongIds(){const P=wiProg(),now=Date.now();return Object.entries(P.q).filter(([k,st])=>recentWrong(st,now)&&wiEx().some(x=>x.id===k)).sort((a,b)=>b[1].last-a[1].last).map(([k])=>k).slice(0,10)}
+function wiWrongIds(){const P=wiProg(),now=Date.now();return Object.entries(P.q).filter(([k,st])=>recentWrong(st,now)&&wrongBack(st,now)&&wiEx().some(x=>x.id===k)).sort((a,b)=>b[1].last-a[1].last).map(([k])=>k).slice(0,10)}
 function w6ChStats(h){const P=wiProg(),ex=W6_EX.filter(x=>x.hoofdstuk===h);const seen=ex.filter(x=>P.q[x.id]).length,good=ex.filter(x=>P.q[x.id]&&P.q[x.id].box>0).length;return{n:ex.length,seen,good,done:ex.length&&good>=Math.ceil(ex.length*0.8)}}
 function renderW6Setup(){
   const chs=[...new Map(W6_EX.map(x=>[x.hoofdstuk,x.onderwerp])).entries()].sort((a,b)=>a[0]-b[0]);
@@ -2993,9 +2994,9 @@ function wiCheck(){const C=S.wi.cur,x=C.x;if(C.state==="right"||C.state==="revea
   const ok=x.o?C.pick===x.a:x.velden.every((f,i)=>wiFieldOk(i));
   if(!C.firstAns)C.firstAns=x.o?x.o[C.pick]:C.vals.join(" | ");
   if(ok){C.state="right";C.first=C.tries===0&&C.step<0;wiFinish(C.first)}
-  else{C.tries++;if(C.tries>=2){C.state="reveal";C.first=false;wiFinish(false)}else{C.state="retry";if(C.step<0){C.step=0;C.stepDone=false;C.stepTries=0}}}
+  else{C.tries++;markSeen(wiProg().q,x.id);if(C.tries>=2){C.state="reveal";C.first=false;wiFinish(false)}else{C.state="retry";if(C.step<0){C.step=0;C.stepDone=false;C.stepTries=0}}}
   C.noFocus=true;renderWiQ();C.noFocus=false}
-function wiHelp(){const C=S.wi.cur,st=C.x.stappen||[];if(C.step<st.length-1){C.step++;C.stepDone=false;C.stepTries=0;C.stepMsg="";C.focusStep=!!st[C.step].ask}C.noFocus=true;renderWiQ();C.noFocus=false;const h=document.querySelector(".hintbox");if(h)h.scrollIntoView({behavior:"smooth",block:"nearest"})}
+function wiHelp(){const C=S.wi.cur,st=C.x.stappen||[];markSeen(wiProg().q,C.x.id);if(C.step<st.length-1){C.step++;C.stepDone=false;C.stepTries=0;C.stepMsg="";C.focusStep=!!st[C.step].ask}C.noFocus=true;renderWiQ();C.noFocus=false;const h=document.querySelector(".hintbox");if(h)h.scrollIntoView({behavior:"smooth",block:"nearest"})}
 function wiStepCheck(){const C=S.wi.cur,s=C.x.stappen[C.step];const v=document.getElementById("wiStepIn").value;if(!v.trim())return;
   if(wiSame(v,s.ans)){C.stepDone=true;C.stepMsg=""}else{C.stepTries++;C.stepMsg=C.stepTries>=2?"Het is "+s.ans+". Kijk nog eens waarom.":"Nog niet helemaal, probeer nog eens.";if(C.stepTries>=2)C.stepDone=true}
   C.focusStep=!C.stepDone;C.noFocus=true;renderWiQ();C.noFocus=false}
@@ -4059,7 +4060,7 @@ document.addEventListener("click",e=>{
     case"evalcopy":copyText(evalText(),"Evaluatie gekopieerd. Plak ze in je Claude-gesprek.");break;
     case"dunno":C.skipped=true;C.phase="help";C.step=0;C.stepDone=false;C.stepTries=0;C.focusStep=true;renderQ();break;
     case"check":checkStep();break;
-    case"hint":S.cur.hints=(S.cur.hints||0)+1;renderQ();{const h=document.querySelector(".hintbox");if(h)h.scrollIntoView({behavior:"smooth",block:"nearest"})}break;
+    case"hint":S.cur.hints=(S.cur.hints||0)+1;if(!S.cur.q.gen)markSeen(S.progress.q,S.cur.q.id);renderQ();{const h=document.querySelector(".hintbox");if(h)h.scrollIntoView({behavior:"smooth",block:"nearest"})}break;
     case"nextstep":C.step++;C.stepDone=false;C.stepTries=0;C.stepMsg="";C.focusStep=true;renderQ();break;
     case"retry":C.phase="retry";renderQ();window.scrollTo({top:0,behavior:"smooth"});break;
     case"next":if(S.session.answers.length>=S.session.len){S.view="sum";render()}else newQ();break;
