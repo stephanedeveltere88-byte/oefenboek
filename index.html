@@ -1246,7 +1246,7 @@ const GEN={
 /* ============================================================
    OPSLAG — Google Sheets via Apps Script; tablet bewaart alles ook lokaal
    ============================================================ */
-const APP_VERSION="2026-10-27e";   // verhoog bij elke nieuwe versie: open toestellen verversen dan vanzelf
+const APP_VERSION="2026-11-02a";   // verhoog bij elke nieuwe versie: open toestellen verversen dan vanzelf
 const API="https://script.google.com/macros/s/AKfycbxYU3NLOuzILvaN4VYhfn_AWjmx5ISrNByfw3saj-wNffYajtyl4GFuwN0eacfKFY5DZw/exec";   // <-- de /exec-link van je Google Apps Script
 const S={profile:null,code:null,progress:null,session:null,view:"login",parentSel:null,parent:null,pin:null,puser:null,online:null};
 const LS={get(k,d){try{const v=localStorage.getItem("oefenhoek:"+k);return v?JSON.parse(v):d}catch(e){return d}},set(k,v){try{localStorage.setItem("oefenhoek:"+k,JSON.stringify(v))}catch(e){}}};
@@ -3807,30 +3807,39 @@ function enStart(topic){const e=enP(),now=Date.now();const items=[];
   }
   if(!items.length)return flash(`Kies eerst een ${TL.deel.toLowerCase()}.`);
   S.en={id:S.profile.id+"-"+TL.key+"-"+now,items,pos:0,done:[],topic:topic||""};enShow()}
-function enShow(){const E=S.en;const it=E.items[E.pos];E.cur={it,t0:Date.now(),res:null,typed:"",help:false,saved:false};S.view="en_q";render();window.scrollTo(0,0);
+function enOpts(w){const juist=enAnswers(w,"en")[0],acc=enAnswers(w,"en").map(nlNorm);const e=enP();
+  const pool=[...new Set([w.unit,...e.units])].flatMap(u=>enWords(u)).map(x=>String(x.nl).split(/\s*\/\s*/)[0]).filter(t=>!acc.includes(nlNorm(t)));
+  const fout=[];for(const t of pool.sort(()=>Math.random()-.5)){if(fout.length>=3)break;if(!fout.some(f=>nlNorm(f)===nlNorm(t)))fout.push(t)}
+  const o=[juist,...fout].sort(()=>Math.random()-.5);return{o,a:o.indexOf(juist)}}
+function enShow(){const E=S.en;const it=E.items[E.pos];E.cur={it,t0:Date.now(),res:null,typed:"",help:false,saved:false,opts:it.kind==="w"&&it.dir==="en"?enOpts(it.w):null};S.view="en_q";render();window.scrollTo(0,0);
   if(TL.auto&&it.kind==="w"&&it.dir!=="ne")tlSpeak(it.w.en)}
 function enCheck(val,pickIx){const E=S.en,C=E.cur,it=C.it;if(C.res)return;
-  if(it.kind==="w"){C.typed=val;C.res=val===null?{ok:false,dunno:true}:enCheckWord(it.w,it.dir,val)}
+  if(it.kind==="w"){if(C.opts&&pickIx!=null){C.typed=C.opts.o[pickIx];C.res={ok:pickIx===C.opts.a}}else{C.typed=val;C.res=val===null?{ok:false,dunno:true}:enCheckWord(it.w,it.dir,val)}}
   else{const x=it.x;if(x.type==="mc"){C.typed=x.o[pickIx];C.res={ok:pickIx===x.a}}else{C.typed=val;const u=enNorm(val);
     C.res=val===null?{ok:false,dunno:true}:(x.ans||[]).some(a=>enNorm(a)===u)?{ok:true}:(x.ans||[]).some(a=>fwEq(enNorm(a),u))?{ok:true,note:"accent"}:{ok:false}}}
   enFinish();render();
   if(TL.auto){if(it.kind==="w"&&it.dir!=="en")tlSpeak(enAnswers(it.w,it.dir)[0]);else if(it.kind==="x"&&/_{2,}/.test(it.x.zin))tlSpeak(fillGap(it.x.zin,it.x.o?it.x.o[it.x.a]:it.x.ans[0]))}}
 function enFinish(){const E=S.en,C=E.cur,it=C.it;if(!C.res||C.saved)return;C.saved=true;const e=enP(),now=Date.now(),ok=C.res.ok,pts=TL.pts&&!noPts();
   if(it.retry){E.done.push({it,ok,retry:true});return}
-  if(it.kind==="w"){const k=enWKey(it.w,it.dir);const st=e.w[k]||{n:0,ok:0,box:0,last:0},due=st.pd!==dKey();st.n++;if(ok){st.ok++;st.box=Math.min(st.box+1,5)}else st.box=0;st.last=now;e.w[k]=st;
+  if(it.kind==="w"){const k=enWKey(it.w,it.dir);const st=e.w[k]||{n:0,ok:0,box:0,last:0},due=st.pd!==dKey();C.key=k;C.prevBox=st.box;st.n++;if(ok){st.ok++;st.box=Math.min(st.box+1,5)}else st.box=0;st.last=now;e.w[k]=st;
     if(ok&&due&&pts){addStars(1/(RW.pts.enw||10));st.pd=dKey()}
     if(!ok)E.items.push({...it,retry:true});
     const shown=it.dir==="en"?(it.w.en):it.dir==="past"?"past simple van "+(it.w.inf||it.w.en):it.w.nl;
-    queueRow({tijdstip:now,profiel:S.profile.id,sessie:E.id,vak:TL.naam,onderdeel:TL.deel+" "+it.w.unit+" woordjes",vraag_id:TL.key+"-w-"+k,vraag:shown+(it.dir==="en"?`  (${TL.naam} → Nederlands)`:it.dir==="ne"?`  (Nederlands → ${TL.naam})`:""),figuur:"",opties:"",
+    C.row=({tijdstip:now,profiel:S.profile.id,sessie:E.id,vak:TL.naam,onderdeel:TL.deel+" "+it.w.unit+" woordjes",vraag_id:TL.key+"-w-"+k,vraag:shown+(it.dir==="en"?`  (${TL.naam} → Nederlands)`:it.dir==="ne"?`  (Nederlands → ${TL.naam})`:""),figuur:"",opties:"",
       juist_antwoord:enAnswers(it.w,it.dir).join(" / "),eerste_keuze:C.res.dunno?"wist het niet":C.typed,tweede_keuze:"",juist_eerste_keer:ok?"ja":"nee",overgeslagen:C.res.dunno?"ja":"nee",later_juist:"",
       seconden:Math.round((now-C.t0)/1000),sessie_lengte:E.items.filter(x=>!x.retry).length,zelf_juist_gezet:"nee",opmerking:C.res.note==="tikfout"?"kleine tikfout":C.res.note==="accent"?"accent vergeten":""})}
   else{const x=it.x,st0=e.x[x.id],st=st0||{n:0,ok:0,box:0,last:0};st.n++;if(ok){st.ok++;st.box=Math.min(st.box+1,5)}else st.box=0;st.last=now;e.x[x.id]=st;
     if(ok&&!st0&&!C.help&&now-C.t0>=3000&&pts)addStars(RW.pts.enx||0.5);
-    queueRow({tijdstip:now,profiel:S.profile.id,sessie:E.id,vak:TL.naam,onderdeel:TL.deel+" "+it.x.unit+": "+x.onderwerp,vraag_id:x.id,vraag:x.opdracht+" "+x.zin,figuur:"",opties:x.o?x.o.map((o,k)=>"ABCD"[k]+": "+o).join(" | "):"",
+    C.row=({tijdstip:now,profiel:S.profile.id,sessie:E.id,vak:TL.naam,onderdeel:TL.deel+" "+it.x.unit+": "+x.onderwerp,vraag_id:x.id,vraag:x.opdracht+" "+x.zin,figuur:"",opties:x.o?x.o.map((o,k)=>"ABCD"[k]+": "+o).join(" | "):"",
       juist_antwoord:x.o?"ABCD"[x.a]+" ("+x.o[x.a]+")":x.ans.join(" / "),eerste_keuze:C.res.dunno?"wist het niet":C.typed,tweede_keuze:"",juist_eerste_keer:ok?"ja":"nee",overgeslagen:C.res.dunno?"ja":"nee",later_juist:"",
       seconden:Math.round((now-C.t0)/1000),sessie_lengte:E.items.length,zelf_juist_gezet:"nee",opmerking:C.help?"uitleg bekeken":""})}
   E.done.push({it,ok})}
-function enNext(){const E=S.en;E.pos++;if(E.pos>=E.items.length){S.view="en_sum";render();syncProgress()}else enShow()}
+function enFlush(){const C=S.en&&S.en.cur;if(C&&C.row&&!C.rowSent){C.rowSent=true;queueRow(C.row)}}
+function enSelf(){const E=S.en,C=E.cur,it=C.it,e=enP();if(!C.res||C.res.ok||C.self||selfLeft(E.done)<=0)return;
+  C.self=true;C.res={ok:true,self:true};const d=E.done[E.done.length-1];if(d){d.ok=true;d.self=true}
+  if(it.kind==="w"){const st=e.w[C.key];if(st){st.ok++;st.box=C.prevBox||0}const last=E.items[E.items.length-1];if(last&&last.retry&&last.w===it.w)E.items.pop()}
+  if(C.row){C.row.juist_eerste_keer="ja";C.row.zelf_juist_gezet="ja"}saveProgress();render()}
+function enNext(){enFlush();const E=S.en;E.pos++;if(E.pos>=E.items.length){S.view="en_sum";render();syncProgress()}else enShow()}
 const enTopicText=(unit,topic)=>((TL.data().find(u=>u.unit===unit)||{uitleg:[]}).uitleg.find(t=>t.onderwerp===topic)||{}).tekst||"";
 const enGap=z=>esc(z).replace(/_{2,}/g,'<span class="engap">___</span>');
 
@@ -3868,22 +3877,23 @@ function renderEnQ(){const E=S.en,C=E.cur,it=C.it,main=E.items.filter(x=>!x.retr
       :`<p class="muted">Hoe zeg je dit in het ${TL.naam}?</p><p class="frword">${esc(w.nl)}</p>`}
   else{const x=it.x;head=`<span class="pill sun">${TL.deel} ${x.unit}</span><span class="pill">${esc(x.onderwerp)}</span>`;
     ask=`<p class="muted">${esc(x.opdracht)}</p><p class="enzin">${enGap(x.zin)}</p>${C.help&&!C.res?`<div class="hintbox">${enTopicText(x.unit,x.onderwerp)}</div>`:""}`}
-  const typing=it.kind==="w"||it.x.type==="typ";
+  const typing=it.kind==="w"?!C.opts:it.x.type==="typ",mcList=it.kind==="w"?(C.opts||{}).o:it.x.o;
   if(!C.res){
     body=typing?`<form id="enForm" class="frform" autocomplete="off"><input id="enIn" class="frin" autocapitalize="none" autocorrect="off" autocomplete="off" spellcheck="false" placeholder="Typ je antwoord" aria-label="Je antwoord">
       <div class="row"><button class="btn" type="submit">Controleer</button><button class="btn ghost small" type="button" data-en="dunno|">Ik weet het niet</button>${it.kind==="x"&&!C.help?`<button class="btn ghost small" type="button" data-en="help|">💡 Uitleg</button>`:""}</div></form>`
-      :`<div class="opts">${it.x.o.map((o,k)=>`<button class="opt" data-en="pick|${k}"><b>${"ABCD"[k]}</b><span class="ov">${esc(o)}</span></button>`).join("")}</div>
-      ${!C.help?`<div class="row"><button class="btn ghost small" data-en="help|">💡 Uitleg</button></div>`:""}`;
+      :`<div class="opts">${mcList.map((o,k)=>`<button class="opt" data-en="pick|${k}"><b>${"ABCD"[k]}</b><span class="ov">${esc(o)}</span></button>`).join("")}</div>
+      ${it.kind==="x"&&!C.help?`<div class="row"><button class="btn ghost small" data-en="help|">💡 Uitleg</button></div>`:""}`;
   }else{const r=C.res;const juist=it.kind==="w"?enAnswers(it.w,it.dir).join(" / "):it.x.o?it.x.o[it.x.a]:it.x.ans[0];
     const vreemd=it.kind==="w"?(it.dir==="en"?it.w.en:juist):/_{2,}/.test(it.x.zin)?fillGap(it.x.zin,juist):"";
     const uit=it.kind==="w"&&it.w.uit?`<p class="small muted">Uitspraak: ${esc(it.w.uit)}</p>`:"";
-    body=r.ok?`<div class="feedback ok" role="status"><h3>${pick(["Juist!","Super!","Goed zo!","Helemaal juist!"])}</h3>${r.note==="tikfout"?`<p>Kleine tikfout. Zo schrijf je het: <b>${esc(juist)}</b></p>`:r.note==="accent"?`<p>Let op het accent: <b>${esc(juist)}</b></p>`:""}
+    body=r.ok?`<div class="feedback ok" role="status"><h3>${C.self?"Oké, ik reken het juist.":pick(["Juist!","Super!","Goed zo!","Helemaal juist!"])}</h3>${r.note==="tikfout"?`<p>Kleine tikfout. Zo schrijf je het: <b>${esc(juist)}</b></p>`:r.note==="accent"?`<p>Let op het accent: <b>${esc(juist)}</b></p>`:""}
         ${vreemd?`<p>${esc(vreemd)} ${sayBtn(vreemd)}</p>`:""}${uit}${it.kind==="x"&&it.x.uitleg?`<p class="small">${esc(it.x.uitleg)}</p>`:""}</div>`
       :`<div class="feedback help" role="status"><h3>${r.dunno?"Geen probleem, nu weet je het.":r.close?"Bijna! Let op de spelling.":"Nog niet juist."}</h3>
         ${C.typed&&!r.dunno?`<p>Jij schreef: <span class="strike">${esc(C.typed)}</span></p>`:""}<p>Juist is: <b class="big2">${esc(juist)}</b> ${it.kind==="w"&&it.dir!=="en"?sayBtn(juist):""}</p>
         ${vreemd&&it.kind==="x"?`<p>${esc(vreemd)} ${sayBtn(vreemd)}</p>`:""}${uit}
         ${it.kind==="x"?`<p>${esc(it.x.uitleg||"")}</p><details><summary class="small">Lees de regel nog eens</summary><div class="hintbox">${enTopicText(it.x.unit,it.x.onderwerp)}</div></details><p class="small muted">Deze oefening komt morgen terug.</p>`
-          :it.retry?"":`<p class="small muted">Dit komt straks nog eens terug.</p>`}</div>`;
+          :it.retry?"":`<p class="small muted">Dit komt straks nog eens terug.</p>`}
+        ${typing&&C.typed&&!r.dunno&&!it.retry?(selfLeft(E.done)>0?`<button class="btn ghost small" data-en="self|">Ik had het toch juist (nog ${selfLeft(E.done)}×)</button>${SELF_NOTE}`:`<p class="small muted">Je hebt "Ik had het toch juist" al ${SELF_MAX} keer gebruikt in deze ronde.</p>`):""}</div>`;
     body+=`<div class="row"><button class="btn" data-en="next|" id="enNextBtn">Volgende</button><button class="link" data-en="stop|">Stoppen</button></div>`}
   $app.innerHTML=`${header()}<div class="progress">${progress}</div><div class="panel"><div class="qhead">${head}<span class="muted small">${it.retry?"Nog eens":`${Math.min(doneMain.length+1,main.length)} van ${main.length}`}</span></div>
     ${ask}${body}${!C.res?`<div class="row"><button class="link" data-en="stop|">Stoppen</button></div>`:""}</div>`;
@@ -3910,7 +3920,8 @@ function enAct(arg){const [a,...r]=arg.split("|");const e=enP();
     case"pick":return enCheck(null,+r[0]);
     case"say":return tlSpeak(r.join("|").replace(/&amp;/g,"&").replace(/&#39;/g,"'").replace(/&quot;/g,'"'));
     case"next":return enNext();
-    case"stop":S.view="en_sum";render();syncProgress();return}}
+    case"self":return enSelf();
+    case"stop":enFlush();S.view="en_sum";render();syncProgress();return}}
 
 /* ===ENGELS-END=== */
 document.addEventListener("click",e=>{
