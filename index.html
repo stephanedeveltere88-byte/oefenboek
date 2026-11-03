@@ -1208,7 +1208,11 @@ const QB = [
 const NAMES=["Lou","Mats","Fien","Rayan","Elise","Jasper","Nora","Wout","Amira","Seppe","Lise","Milan"];
 const rnd=(a,b)=>a+Math.floor(Math.random()*(b-a+1));
 const pick=a=>a[Math.floor(Math.random()*a.length)];
-function numOpts(ans,cands,fmt=x=>String(x)){const s=new Set([ans]);for(const c of cands){if(s.size>=5)break;if(c>0&&Number.isInteger(c))s.add(c)}let k=1;while(s.size<5){s.add(ans+k);k=k>0?-k:-k+1}const arr=[...s].sort((x,y)=>x-y);return{o:arr.map(fmt),a:arr.indexOf(ans)}}
+const shuf=a=>a.map(x=>[Math.random(),x]).sort((x,y)=>x[0]-y[0]).map(x=>x[1]);
+function numOpts(ans,cands,fmt=x=>String(x)){ // juiste antwoord op een willekeurige plaats (A–E), afleiders liefst uit cands
+  const ok=c=>c>0&&Number.isInteger(c)&&c!==ans,pool=shuf([...new Set([...cands,...[1,2,3,4,5,6,7,8].flatMap(d=>[ans-d,ans+d])])].filter(ok)),pri=new Set(cands);
+  const lo=pool.filter(c=>c<ans).sort((x,y)=>pri.has(y)-pri.has(x)),hi=pool.filter(c=>c>ans).sort((x,y)=>pri.has(y)-pri.has(x));
+  const k=Math.min(lo.length,rnd(0,4));const arr=[...lo.slice(0,k),ans,...hi.slice(0,4-k)].sort((x,y)=>x-y);return{o:arr.map(fmt),a:arr.indexOf(ans)}}
 const pad=n=>String(n).padStart(2,"0");
 const GEN={
   rekenen(){for(;;){const n=pick([12,16,18,20,24,30,36]);const f=pick([[2,"½"],[3,"⅓"],[4,"¼"],[6,"⅙"]]);if(n%f[0])continue;const e1=n/f[0],rest=n-e1;const g=pick([[2,"de helft"],[3,"⅓"]]);if(rest%g[0])continue;const e2=rest/g[0],left=rest-e2;const A=pick(NAMES),B=pick(NAMES.filter(x=>x!==A));
@@ -1232,7 +1236,7 @@ const GEN={
     return{figHtml:cubesFig(H),desc,q:"Onder elk blokje staat een ander blokje of de grond. Hoeveel blokjes zijn er gebruikt?",...numOpts(tot,[visible,tot-1,tot+1,tot+2,tot-2]),
     steps:[{t:"Tel per torentje hoe hoog het is en tel alles op. Begin achteraan bij de hoogste toren."},{t:"De hoogtes zijn: "+H.map(r=>r.filter(h=>h).join(" + ")).filter(Boolean).join(" | ")+"."},{t:"Tel alles samen.",ask:"Hoeveel blokjes zijn er?",ans:String(tot)},{t:`Er zijn <b>${tot} blokjes</b>.`}]}},
   tijd(){const sh=rnd(7,15),sm=rnd(0,11)*5,dur=rnd(7,34)*5;const st=sh*60+sm,en=st+dur;const f=m=>`${Math.floor(m/60)}.${pad(m%60)} uur`;const dh=Math.floor(dur/60),dm=dur%60;const durTxt=dh?`${dh} uur en ${dm} minuten`:`${dm} minuten`;const A=pick(NAMES);
-    const cands=[en+10,en-10,en+60,en-5,en+5].map(f);const s=new Set([f(en),...cands]);const arr=[...s].slice(0,5).sort((x,y)=>parseFloat(x)-parseFloat(y));
+    const k=rnd(0,4),offs=[-60,-15,-10,-5,5,10,15,60];const lo=shuf(offs.filter(o=>o<0&&en+o>0)).slice(0,k),hi=shuf(offs.filter(o=>o>0)).slice(0,4-k);const arr=[...lo,0,...hi].sort((x,y)=>x-y).map(o=>f(en+o));
     return{q:`${A} vertrekt om ${f(st)} voor een fietstocht van ${durTxt}. Hoe laat komt ${A} aan?`,o:arr,a:arr.indexOf(f(en)),
     steps:[{t:dh?`Tel eerst de volle uren erbij: ${dh} uur.`:"Tel de minuten erbij."},{t:`Daarna de minuten. Komt je boven 60 minuten? Dan wordt dat 1 uur extra.`},{t:"Schrijf het uur als bijvoorbeeld 14.35.",ask:"Hoe laat komt "+A+" aan?",ans:f(en).replace(" uur","")},{t:`${A} komt aan om <b>${f(en)}</b>.`}]}},
   tellen(){const n=rnd(4,10),h=n*(n-1)/2;const A=pick(["vrienden","spelers","kinderen"]);
@@ -1246,7 +1250,7 @@ const GEN={
 /* ============================================================
    OPSLAG — Google Sheets via Apps Script; tablet bewaart alles ook lokaal
    ============================================================ */
-const APP_VERSION="2026-11-02a";   // verhoog bij elke nieuwe versie: open toestellen verversen dan vanzelf
+const APP_VERSION="2026-11-03a";   // verhoog bij elke nieuwe versie: open toestellen verversen dan vanzelf
 const API="https://script.google.com/macros/s/AKfycbxYU3NLOuzILvaN4VYhfn_AWjmx5ISrNByfw3saj-wNffYajtyl4GFuwN0eacfKFY5DZw/exec";   // <-- de /exec-link van je Google Apps Script
 const S={profile:null,code:null,progress:null,session:null,view:"login",parentSel:null,parent:null,pin:null,puser:null,online:null};
 const LS={get(k,d){try{const v=localStorage.getItem("oefenhoek:"+k);return v?JSON.parse(v):d}catch(e){return d}},set(k,v){try{localStorage.setItem("oefenhoek:"+k,JSON.stringify(v))}catch(e){}}};
@@ -1379,6 +1383,10 @@ function nextQuestion(){
   return ch.q;
 }
 function markSeen(P,key){if(!P[key]){P[key]={n:0,ok:0,box:0,last:Date.now()};saveProgress()}}
+// Kangoeroe: wie fout antwoordt, "weet ik niet" kiest of uitleg vraagt, krijgt die vraag vandaag niet meer terug — ook niet na afmelden
+function kgMarkWrong(q){if(q.gen)return;const st=S.progress.q[q.id]||{n:0,ok:0,box:0,last:0};st.box=0;st.last=Date.now();S.progress.q[q.id]=st;saveProgress();
+  if(S.code&&apiOk())apiPost({action:"answers",profile:S.profile.id,code:S.code,rows:[],progress:S.progress}).catch(()=>{})}
+function mergeQ(P,o){Object.entries((o&&o.q)||{}).forEach(([k,st])=>{const m=P.q[k];if(st&&(!m||(+st.last||0)>(+m.last||0)))P.q[k]=st});return P}
 function recordAnswer(q,firstOk){const now=Date.now();const P=S.progress;
   const key=q.gen?"gen-"+q.cat:q.id;const st=P.q[key]||{n:0,ok:0,box:0,last:0};st.n++;if(firstOk){st.ok++;st.box=Math.min(st.box+1,5)}else st.box=0;st.last=now;P.q[key]=st;
   const c=P.cat[q.cat]||{n:0,ok:0,recent:[]};c.n++;if(firstOk)c.ok++;c.recent=[...c.recent,firstOk?1:0].slice(-10);c.last=now;P.cat[q.cat]=c;}
@@ -1482,7 +1490,7 @@ function quickLogin(c){
     if(!r||S.code!==c.code)return;
     if(!r.ok){LS.set("cred",null);S.profile=null;S.code=null;S.view="login";render();flash("Je code is veranderd. Meld je opnieuw aan.");return}
     S.profile=r.profile;LS.set("cred",{id:c.id,code:c.code,profile:r.profile});
-    if(actScore(r.progress)>actScore(S.progress)){S.progress=fixProg(r.progress);saveProgress()}
+    if(actScore(r.progress)>actScore(S.progress)){S.progress=mergeQ(fixProg(r.progress),S.progress);saveProgress()}
     if(S.view==="menu")render();
   }).catch(()=>{});
   flush();
@@ -1498,7 +1506,7 @@ async function login(raw,code,remember,err){
   else{const c=LS.get("cred",null);if(c&&c.id===id&&c.code===code)prof=c.profile;else{err.textContent="Ik kan niet verbinden. Is er internet?";return}}
   LS.set("cred",remember?{id,code,profile:prof}:null);
   const local=LS.get("progress:"+prof.id,null);
-  S.profile=prof;S.code=code;S.progress=fixProg(actScore(server)>=actScore(local)?server:local);saveProgress();
+  S.profile=prof;S.code=code;S.progress=mergeQ(fixProg(actScore(server)>=actScore(local)?server:local),actScore(server)>=actScore(local)?local:server);saveProgress();
   S.view="menu";render();flush();prefetch();
 }
 
@@ -1686,15 +1694,17 @@ function checkStep(){const C=S.cur,s=C.q.steps[C.step];const v=document.getEleme
   C.focusStep=!C.stepDone;renderQ()}
 
 function choose(k){const C=S.cur,q=C.q;
-  if(C.phase==="ask"){C.first=k;if(k===q.a){C.phase="right";finishQ(!C.hints,C.hints?true:null)}else{markSeen(S.progress.q,q.gen?"gen-"+q.cat:q.id);C.wrong.push(k);C.phase="help";C.step=0;C.stepDone=false;C.stepTries=0;C.focusStep=true}}
+  if(C.phase==="ask"){C.first=k;if(k===q.a){C.phase="right";finishQ(!C.hints,C.hints?true:null)}else{kgMarkWrong(q);C.wrong.push(k);C.phase="help";C.step=0;C.stepDone=false;C.stepTries=0;C.focusStep=true}}
   else if(C.phase==="retry"){C.second=k;if(k===q.a){C.phase="solved";finishQ(false,true)}else{C.wrong.push(k);C.phase="reveal";C.step=q.steps.length-1;finishQ(false,false)}}
   renderQ();
 }
 const plain=s=>String(s).replace(/<br>/g," ").replace(/<[^>]+>/g,"").replace(/\s+/g," ").trim();
 const optLabel=(q,k)=>k==null?"":"ABCDE"[k]+" ("+(Array.isArray(q.o[k])?"figuur "+"ABCDE"[k]:plain(q.o[k]))+")";
 function finishQ(firstOk,retryOk=null){const C=S.cur,q=C.q,now=Date.now();
-  const st0=S.progress.q[q.id],fresh=q.gen||!st0,fast=now-C.t0<3000;
-  recordAnswer(q,firstOk);if(firstOk&&fresh&&!fast)addStars(RW.pts["kg"+Math.min(3,Math.max(1,q.d||2))]);
+  const st0=S.progress.q[q.id],fast=now-C.t0<3000;
+  // automatisch gemaakte vragen: hoogstens 3 keer punten per onderdeel per dag
+  const G=S.progress.genPd&&S.progress.genPd.d===dKey(new Date(now))?S.progress.genPd:(S.progress.genPd={d:dKey(new Date(now)),c:{}}),fresh=q.gen?(G.c[q.cat]||0)<3:!st0;
+  recordAnswer(q,firstOk);if(firstOk&&fresh&&!fast){if(q.gen)G.c[q.cat]=(G.c[q.cat]||0)+1;addStars(RW.pts["kg"+Math.min(3,Math.max(1,q.d||2))])}
   S.session.answers.push({qid:q.id,cat:q.cat,firstOk,skipped:!!C.skipped,retryOk,ms:now-C.t0,at:now});
   S.session.endedAt=now;
   const row={tijdstip:now,profiel:S.profile.id,sessie:S.session.id,vak:"Kangoeroe",onderdeel:CATS[q.cat].name,vraag_id:q.id,vraag:plain(q.q),figuur:q.desc||"",
@@ -3986,7 +3996,7 @@ document.addEventListener("click",e=>{
   const a=t.dataset.act;if(!a)return;
   const C=S.cur;
   switch(a){
-    case"logout":if(S.lz)lzMic(false);S.profile=null;S.code=null;S.view="login";render();break;
+    case"logout":if(S.lz)lzMic(false);if(S.view==="q"&&S.cur&&S.cur.q&&["help","retry"].includes(S.cur.phase)){S.cur.phase="reveal";finishQ(false,false)}S.profile=null;S.code=null;S.view="login";render();break;
     case"lezen":if(S.lz)lzMic(false);S.view="lzkies";render();break;
     case"lzmic":{const L=S.lz;L.autoScroll=true;lzMic(!L.listening);break}
     case"lznext":lzNext();break;
@@ -4069,9 +4079,9 @@ document.addEventListener("click",e=>{
     case"rwzero":{const P=S.parent,sd=saldoOf(S.parentSel,fixProg(P.progress[S.parentSel]));if(sd>0&&confirm(`Spaarpot van ${(P.profiles.find(x=>x.id===S.parentSel)||{}).name} op 0 zetten (−${sd} punten)?`))rwDeduct(sd,"op 0 gezet");break}
     case"copy":copyForClaude();break;
     case"evalcopy":copyText(evalText(),"Evaluatie gekopieerd. Plak ze in je Claude-gesprek.");break;
-    case"dunno":C.skipped=true;C.phase="help";C.step=0;C.stepDone=false;C.stepTries=0;C.focusStep=true;renderQ();break;
+    case"dunno":kgMarkWrong(C.q);C.skipped=true;C.phase="help";C.step=0;C.stepDone=false;C.stepTries=0;C.focusStep=true;renderQ();break;
     case"check":checkStep();break;
-    case"hint":S.cur.hints=(S.cur.hints||0)+1;if(!S.cur.q.gen)markSeen(S.progress.q,S.cur.q.id);renderQ();{const h=document.querySelector(".hintbox");if(h)h.scrollIntoView({behavior:"smooth",block:"nearest"})}break;
+    case"hint":S.cur.hints=(S.cur.hints||0)+1;kgMarkWrong(S.cur.q);renderQ();{const h=document.querySelector(".hintbox");if(h)h.scrollIntoView({behavior:"smooth",block:"nearest"})}break;
     case"nextstep":C.step++;C.stepDone=false;C.stepTries=0;C.stepMsg="";C.focusStep=true;renderQ();break;
     case"retry":C.phase="retry";renderQ();window.scrollTo({top:0,behavior:"smooth"});break;
     case"next":if(S.session.answers.length>=S.session.len){S.view="sum";render()}else newQ();break;
