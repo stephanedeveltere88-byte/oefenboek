@@ -1250,7 +1250,7 @@ const GEN={
 /* ============================================================
    OPSLAG — Google Sheets via Apps Script; tablet bewaart alles ook lokaal
    ============================================================ */
-const APP_VERSION="2026-11-03a";   // verhoog bij elke nieuwe versie: open toestellen verversen dan vanzelf
+const APP_VERSION="2026-11-03b";   // verhoog bij elke nieuwe versie: open toestellen verversen dan vanzelf
 const API="https://script.google.com/macros/s/AKfycbxYU3NLOuzILvaN4VYhfn_AWjmx5ISrNByfw3saj-wNffYajtyl4GFuwN0eacfKFY5DZw/exec";   // <-- de /exec-link van je Google Apps Script
 const S={profile:null,code:null,progress:null,session:null,view:"login",parentSel:null,parent:null,pin:null,puser:null,online:null};
 const LS={get(k,d){try{const v=localStorage.getItem("oefenhoek:"+k);return v?JSON.parse(v):d}catch(e){return d}},set(k,v){try{localStorage.setItem("oefenhoek:"+k,JSON.stringify(v))}catch(e){}}};
@@ -1367,15 +1367,18 @@ function nextQuestion(){
   if(S.session.fixed&&S.session.fixed.length){const id=S.session.fixed.shift();const q=QB.find(x=>x.id===id);if(q)return q}
   const used=new Set(S.session.answers.map(a=>a.qid));const acc=catAcc();const recentCats=S.session.answers.slice(-2).map(a=>a.cat);
   let cats=(S.session.focus?[S.session.focus]:CAT_IDS).map(k=>{const a=acc[k];let w=0.35+2.2*(1-a.acc);if(a.n<3)w+=0.9;if(!S.session.focus&&recentCats.includes(k))w*=0.35;return{k,w}});
-  const cat=weightedPick(cats).k;
   const LV=LEVELS[S.session.level||"wedstrijd"].w;
   let ed=kgEdition(),bank=kgBank(ed);
   if(!bank.some(kgOpenQ)&&kgLevelUp()){ed=kgEdition();bank=kgBank(ed)}
   // alleen nieuwe vragen en vragen die fout gingen; gekende vragen komen niet meer terug
   const now=Date.now(),back=q=>knownBack(S.progress.q[q.id],now);
   const pool=bank.filter(q=>{const st=S.progress.q[q.id];return !used.has(q.id)&&(!st||wrongBack(st,now)||back(q))});
+  // een gemaakte vraag heeft per onderdeel maar één sjabloon (bv. handdrukken): hoogstens 1 per onderdeel per sessie
+  const genUsed=new Set(S.session.answers.filter(a=>String(a.qid).startsWith("gen-")).map(a=>a.cat)),genOk=k=>ed==="koala"&&!genUsed.has(k);
+  const live=cats.filter(c=>genOk(c.k)||pool.some(q=>q.cat===c.k));
+  const cat=weightedPick(live.length?live:cats).k;
   let cands=pool.filter(q=>q.cat===cat).map(q=>({q,w:(S.progress.q[q.id]?(kgOpenQ(q)?4:0.6):2.5)*LV[q.d||2]}));
-  if(ed==="koala")cands.push({gen:cat,w:(pool.length?0.4:3)*LV[1]});
+  if(genOk(cat))cands.push({gen:cat,w:(cands.length?0.4:3)*LV[1]});
   if(!cands.length){if(pool.length)return weightedPick(pool.map(q=>({q,w:LV[q.d||2]}))).q;
     const rest=bank.filter(q=>!used.has(q.id)).sort((a,b)=>((S.progress.q[a.id]||{}).last||0)-((S.progress.q[b.id]||{}).last||0));return rest[0]||bank[Math.floor(Math.random()*bank.length)]}
   const ch=weightedPick(cands);
